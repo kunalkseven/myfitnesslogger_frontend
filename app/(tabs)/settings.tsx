@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth, useUser, useSignIn, useSignUp } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Layout } from '../../src/theme';
 import { Card, Button } from '../../src/components';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +10,7 @@ import { useDatabase } from '../../src/database/DatabaseProvider';
 import { SyncService } from '../../src/services/SyncService';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { isLoaded, userId, sessionId, getToken, signOut } = useAuth();
   const { user } = useUser();
   const { db } = useDatabase();
@@ -82,7 +84,7 @@ export default function SettingsScreen() {
             <Button
               title="Sign In / Sign Up"
               variant="primary"
-              onPress={() => Alert.alert('Clerk Auth', 'Please configure your CLERK_PUBLISHABLE_KEY to enable real login.')}
+              onPress={() => router.push('/(auth)/sign-in')}
             />
           </Card>
         )}
