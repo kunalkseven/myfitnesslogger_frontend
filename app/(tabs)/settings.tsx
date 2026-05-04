@@ -1,0 +1,147 @@
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth, useUser, useSignIn, useSignUp } from '@clerk/clerk-expo';
+import { Colors, Typography, Spacing, Layout } from '../../src/theme';
+import { Card, Button } from '../../src/components';
+import { Ionicons } from '@expo/vector-icons';
+import { useDatabase } from '../../src/database/DatabaseProvider';
+import { SyncService } from '../../src/services/SyncService';
+
+export default function SettingsScreen() {
+  const { isLoaded, userId, sessionId, getToken, signOut } = useAuth();
+  const { user } = useUser();
+  const { db } = useDatabase();
+
+  const handleSync = async () => {
+    if (!db || !getToken) return;
+    try {
+      const token = await getToken();
+      const syncService = new SyncService(db);
+      await syncService.sync(token);
+      Alert.alert('Sync Successful', 'Your local changes have been pushed to NeonDB.');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Sync Failed', 'Please check your connection and try again.');
+    }
+  };
+
+  const handleSignOut = () => {
+    signOut();
+  };
+
+  if (!isLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={{ color: Colors.textSecondary }}>Loading Auth...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.header}>Settings</Text>
+
+        {userId ? (
+          <Card variant="elevated" style={styles.profileCard}>
+            <View style={styles.profileInfo}>
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={32} color={Colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.userName}>{user?.primaryEmailAddress?.emailAddress || 'User'}</Text>
+                <Text style={styles.userSub}>Synced with NeonDB</Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <Button
+              title="Sync Now"
+              variant="secondary"
+              icon="sync-outline"
+              onPress={handleSync}
+              style={{ marginBottom: Spacing.md }}
+            />
+
+            <Button
+              title="Sign Out"
+              variant="danger"
+              icon="log-out-outline"
+              onPress={handleSignOut}
+            />
+          </Card>
+        ) : (
+          <Card variant="highlighted" style={styles.authCard}>
+            <Ionicons name="cloud-upload" size={48} color={Colors.primary} style={{ alignSelf: 'center', marginBottom: Spacing.md }} />
+            <Text style={styles.authTitle}>Backup to Cloud</Text>
+            <Text style={styles.authDesc}>Sign in with Clerk to sync your workouts across devices using NeonDB.</Text>
+
+            {/* Note: In a real app, you'd use Clerk's OAuth flows or a dedicated login screen */}
+            <Button
+              title="Sign In / Sign Up"
+              variant="primary"
+              onPress={() => Alert.alert('Clerk Auth', 'Please configure your CLERK_PUBLISHABLE_KEY to enable real login.')}
+            />
+          </Card>
+        )}
+
+        <Text style={styles.sectionTitle}>App Preferences</Text>
+        <Card variant="default" style={styles.settingsGroup}>
+          <SettingItem icon="notifications-outline" label="Notifications" value="Enabled" />
+          <SettingItem icon="barbell-outline" label="Units" value="Metric (kg)" />
+          <SettingItem icon="timer-outline" label="Rest Timer" value="90s" />
+        </Card>
+
+        <Text style={styles.sectionTitle}>Support</Text>
+        <Card variant="default" style={styles.settingsGroup}>
+          <SettingItem icon="help-circle-outline" label="Help Center" />
+          <SettingItem icon="star-outline" label="Rate the App" />
+          <SettingItem icon="information-circle-outline" label="Version" value="1.0.0" />
+        </Card>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function SettingItem({ icon, label, value }: { icon: any, label: string, value?: string }) {
+  return (
+    <View style={styles.settingItem}>
+      <View style={styles.settingLabel}>
+        <Ionicons name={icon} size={20} color={Colors.textSecondary} />
+        <Text style={styles.settingText}>{label}</Text>
+      </View>
+      {value && <Text style={styles.settingValue}>{value}</Text>}
+      <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: Colors.background },
+  container: { flex: 1 },
+  content: { padding: Layout.screenPaddingHorizontal },
+  header: { ...Typography.displayMedium, color: Colors.textPrimary, marginBottom: Spacing.xl },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+
+  profileCard: { padding: Spacing.lg, marginBottom: Spacing.xl },
+  profileInfo: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.lg },
+  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.primaryMuted },
+  userName: { ...Typography.h3, color: Colors.textPrimary },
+  userSub: { ...Typography.caption, color: Colors.textSecondary },
+  divider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.lg },
+
+  authCard: { padding: Spacing.xl, marginBottom: Spacing.xl, alignItems: 'center' },
+  authTitle: { ...Typography.h2, color: Colors.textPrimary, textAlign: 'center', marginBottom: Spacing.sm },
+  authDesc: { ...Typography.bodyMedium, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.xl },
+
+  sectionTitle: { ...Typography.labelSmall, color: Colors.textTertiary, marginLeft: Spacing.xs, marginBottom: Spacing.sm, marginTop: Spacing.lg },
+  settingsGroup: { padding: 0, overflow: 'hidden' },
+  settingItem: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  settingLabel: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  settingText: { ...Typography.bodyLarge, color: Colors.textPrimary },
+  settingValue: { ...Typography.bodyMedium, color: Colors.textSecondary, marginRight: Spacing.sm },
+});
