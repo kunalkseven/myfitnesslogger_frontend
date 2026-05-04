@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
@@ -8,12 +8,59 @@ import { Card, Button } from '../../src/components';
 import { Ionicons } from '@expo/vector-icons';
 import { useDatabase } from '../../src/database/DatabaseProvider';
 import { SyncService } from '../../src/services/SyncService';
+import { UserRepository } from '../../src/database/repositories';
+import { User } from '../../src/models';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { isLoaded, userId, sessionId, getToken, signOut } = useAuth();
   const { user } = useUser();
   const { db } = useDatabase();
+  
+  const [localUser, setLocalUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    async function loadUser() {
+      if (!db) return;
+      const repo = new UserRepository(db);
+      const idToFetch = userId || 'guest_user';
+      let u = await repo.getUser(idToFetch);
+      
+      // If no guest user exists yet, we just show defaults
+      if (u) {
+        setLocalUser(u);
+      }
+    }
+    loadUser();
+  }, [db, userId]);
+
+  const updatePreference = async (key: string, value: any) => {
+    if (!db || !localUser) return;
+    const repo = new UserRepository(db);
+    
+    const newPrefs = { ...localUser.preferences, [key]: value };
+    await repo.upsertUser(localUser.id, { preferences: newPrefs });
+    setLocalUser({ ...localUser, preferences: newPrefs });
+  };
+
+  const toggleUnits = () => {
+    const current = localUser?.preferences.units || 'metric';
+    updatePreference('units', current === 'metric' ? 'imperial' : 'metric');
+  };
+
+  const toggleNotifications = () => {
+    const current = localUser?.preferences.notificationsEnabled ?? true;
+    updatePreference('notificationsEnabled', !current);
+  };
+
+  const cycleRestTimer = () => {
+    const current = localUser?.preferences.restTimerDefaultSeconds || 90;
+    let next = 60;
+    if (current === 60) next = 90;
+    else if (current === 90) next = 120;
+    
+    updatePreference('restTimerDefaultSeconds', next);
+  };
 
   const handleSync = async () => {
     if (!db || !getToken) return;
@@ -39,6 +86,12 @@ export default function SettingsScreen() {
       </View>
     );
   }
+
+  const prefs = localUser?.preferences || {
+    units: 'metric',
+    restTimerDefaultSeconds: 90,
+    notificationsEnabled: true
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -80,7 +133,6 @@ export default function SettingsScreen() {
             <Text style={styles.authTitle}>Backup to Cloud</Text>
             <Text style={styles.authDesc}>Sign in with Clerk to sync your workouts across devices using NeonDB.</Text>
 
-            {/* Note: In a real app, you'd use Clerk's OAuth flows or a dedicated login screen */}
             <Button
               title="Sign In / Sign Up"
               variant="primary"
@@ -91,15 +143,30 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitle}>App Preferences</Text>
         <Card variant="default" style={styles.settingsGroup}>
-          <SettingItem icon="notifications-outline" label="Notifications" value="Enabled" />
-          <SettingItem icon="barbell-outline" label="Units" value="Metric (kg)" />
-          <SettingItem icon="timer-outline" label="Rest Timer" value="90s" />
+          <SettingItem 
+            icon="notifications-outline" 
+            label="Notifications" 
+            value={prefs.notificationsEnabled ? "Enabled" : "Disabled"} 
+            onPress={toggleNotifications}
+          />
+          <SettingItem 
+            icon="barbell-outline" 
+            label="Units" 
+            value={prefs.units === 'metric' ? "Metric (kg)" : "Imperial (lbs)"} 
+            onPress={toggleUnits}
+          />
+          <SettingItem 
+            icon="timer-outline" 
+            label="Rest Timer" 
+            value={`${prefs.restTimerDefaultSeconds}s`} 
+            onPress={cycleRestTimer}
+          />
         </Card>
 
         <Text style={styles.sectionTitle}>Support</Text>
         <Card variant="default" style={styles.settingsGroup}>
-          <SettingItem icon="help-circle-outline" label="Help Center" />
-          <SettingItem icon="star-outline" label="Rate the App" />
+          <SettingItem icon="help-circle-outline" label="Help Center" onPress={() => {}} />
+          <SettingItem icon="star-outline" label="Rate the App" onPress={() => {}} />
           <SettingItem icon="information-circle-outline" label="Version" value="1.0.0" />
         </Card>
 
@@ -109,17 +176,22 @@ export default function SettingsScreen() {
   );
 }
 
-function SettingItem({ icon, label, value }: { icon: any, label: string, value?: string }) {
-  return (
-    <View style={styles.settingItem}>
+function SettingItem({ icon, label, value, onPress }: { icon: any, label: string, value?: string, onPress?: () => void }) {
+  const content = (
+    <View style={[styles.settingItem, !onPress && { opacity: 0.7 }]}>
       <View style={styles.settingLabel}>
         <Ionicons name={icon} size={20} color={Colors.textSecondary} />
         <Text style={styles.settingText}>{label}</Text>
       </View>
       {value && <Text style={styles.settingValue}>{value}</Text>}
-      <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+      {onPress && <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />}
     </View>
   );
+
+  if (onPress) {
+    return <TouchableOpacity onPress={onPress}>{content}</TouchableOpacity>;
+  }
+  return content;
 }
 
 const styles = StyleSheet.create({
